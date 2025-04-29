@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice-Enabled Medicine & Water Reminder</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #E0FFFF;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      height: 100vh;
+      padding: 20px;
+    }
+
+    .frame {
+      background-color: #008080;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      margin: 10px;
+      padding: 20px;
+      width: 80%;
+      max-width: 500px;
+      text-align: center;
+    }
+
+    h2 {
+      margin-top: 0;
+    }
+
+    input, select, button {
+      padding: 10px;
+      margin: 5px;
+      width: 100%;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    .reminder-item {
+      background-color: #d4f7d4;
+      border: 1px solid #4CAF50;
+      padding: 10px;
+      margin: 5px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .delete-btn {
+      background-color: #f44336;
+      color: white;
+      border: none;
+      padding: 5px;
+      cursor: pointer;
+    }
+
+    .delete-btn:hover {
+      background-color: #d32f2f;
+    }
+
+    .alert {
+      color: red;
+      font-weight: bold;
+      margin-top: 20px;
+      font-size: 1.2rem;
+    }
+
+    #voiceOutput {
+      font-style: italic;
+      margin-top: 10px;
+      color: #333;
+    }
+
+    .reminder-list {
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 20px;
+    }
+
+    .frame button {
+      cursor: pointer;
+    }
+
+  </style>
+</head>
+<body>
+  <h1>Voice-Enabled Medicine & Water Reminder</h1>
+
+  <!-- Frame 1: Set Reminder -->
+  <div class="frame">
+    <h2>Set New Reminder</h2>
+    <input type="time" id="reminderTime" />
+    <input type="date" id="reminderDate" />
+    <input type="text" id="reminderMessage" placeholder="Enter reminder message" />
+    <label>Repeat:</label>
+    <select id="repeatSelect">
+      <option value="none">No Repeat</option>
+      <option value="daily">Daily</option>
+      <option value="weekdays">Weekdays</option>
+      <option value="weekends">Weekends</option>
+    </select>
+    <button onclick="addReminder()">Add Reminder</button>
+  </div>
+
+  <!-- Frame 2: Voice Input -->
+  <div class="frame">
+    <h2>Voice Command</h2>
+    <button onclick="startVoiceInput()">🎤 Start Voice Input</button>
+    <div id="voiceOutput">Say "Remind me to take medicine at 10:30 on 2023-05-01"</div>
+  </div>
+
+  <!-- Frame 3: Reminders List -->
+  <div class="frame">
+    <h2>Upcoming Reminders</h2>
+    <div id="reminderList" class="reminder-list"></div>
+  </div>
+
+  <!-- Frame 4: Alert -->
+  <div class="frame">
+    <h2>Upcoming Alert</h2>
+    <div id="alert" class="alert">No current alert</div>
+  </div>
+
+  <!-- Beep Sound -->
+  <audio id="alarmSound" src="https://www.soundjay.com/buttons/sounds/beep-07.mp3" preload="auto"></audio>
+
+  <script>
+    let reminders = JSON.parse(localStorage.getItem('reminders')) || [];
+    let lastAlertTime = "";
+
+    function saveReminders() {
+      localStorage.setItem('reminders', JSON.stringify(reminders));
+    }
+
+    function addReminder() {
+      const time = document.getElementById('reminderTime').value;
+      const date = document.getElementById('reminderDate').value;
+      const message = document.getElementById('reminderMessage').value.trim();
+      const repeat = document.getElementById('repeatSelect').value;
+
+      if (!time || !date || !message) {
+        alert("Please enter all details.");
+        return;
+      }
+
+      const reminder = {
+        time,
+        date,
+        message,
+        repeat
+      };
+
+      reminders.push(reminder);
+      saveReminders();
+      displayReminders();
+      document.getElementById('reminderTime').value = "";
+      document.getElementById('reminderDate').value = "";
+      document.getElementById('reminderMessage').value = "";
+    }
+
+    function deleteReminder(index) {
+      reminders.splice(index, 1);
+      saveReminders();
+      displayReminders();
+    }
+
+    function displayReminders() {
+      const list = document.getElementById('reminderList');
+      list.innerHTML = "";
+      reminders.forEach((r, i) => {
+        const div = document.createElement("div");
+        div.className = "reminder-item";
+        div.innerHTML = `<span>${r.time} - ${r.message} (Repeat: ${r.repeat}, Date: ${r.date})</span>
+                         <button class="delete-btn" onclick="deleteReminder(${i})">Delete</button>`;
+        list.appendChild(div);
+      });
+    }
+
+    function checkReminders() {
+      const now = new Date();
+      const currentTime = now.toTimeString().slice(0, 5); // HH:MM
+      const currentDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      const alertDiv = document.getElementById("alert");
+      const found = reminders.find(r => r.time === currentTime && r.date === currentDate);
+
+      if (found && lastAlertTime !== currentTime) {
+        alertDiv.textContent = `🔔 ${found.message}`;
+        document.getElementById('alarmSound').play();
+        showNotification(found.message);
+        lastAlertTime = currentTime;
+      } else if (!found && alertDiv.textContent !== "No current alert") {
+        alertDiv.textContent = "No current alert";
+      }
+    }
+
+    function showNotification(message) {
+      if (Notification.permission === 'granted') {
+        new Notification("⏰ Reminder", {
+          body: message,
+          icon: "https://cdn-icons-png.flaticon.com/512/565/565547.png"
+        });
+      }
+    }
+
+    function startVoiceInput() {
+      if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+        alert("Your browser doesn't support voice recognition.");
+        return;
+      }
+
+      const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.start();
+      document.getElementById("voiceOutput").textContent = "Listening...";
+
+      recognition.onresult = function(event) {
+        const text = event.results[0][0].transcript;
+        document.getElementById("voiceOutput").textContent = `You said: "${text}"`;
+
+        const timeMatch = text.match(/\b\d{1,2}:\d{2}\b/);
+        const dateMatch = text.match(/\d{4}-\d{2}-\d{2}/);
+        const msgMatch = text.match(/remind me to (.+?) at/i);
+
+        if (timeMatch && dateMatch && msgMatch) {
+          const time = timeMatch[0];
+          const date = dateMatch[0];
+          const message = msgMatch[1];
+          reminders.push({ time, date, message, repeat: 'none' });
+          saveReminders();
+          displayReminders();
+        } else {
+          document.getElementById("voiceOutput").textContent += " (Couldn't parse reminder)";
+        }
+      };
+
+      recognition.onerror = function(event) {
+        document.getElementById("voiceOutput").textContent = "Error: " + event.error;
+      };
+    }
+
+    // Request notification permission if not granted
+    if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+      Notification.requestPermission();
+    }
+
+    displayReminders();
+    setInterval(checkReminders, 1000);
+  </script>
+</body>
+</html>
